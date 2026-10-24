@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Ledger</string>
+    <string name="widget_name">Ledger this month</string>
+    <string name="widget_desc">Money out and money in for the current month</string>
+</resources>

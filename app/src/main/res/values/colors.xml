@@ -1,0 +1,7 @@
+<resources>
+    <color name="icon_bg">#0F4C5C</color>
+    <color name="widget_bg">#F20F4C5C</color>
+    <color name="widget_text">#FFFFFF</color>
+    <color name="widget_sub">#B3FFFFFF</color>
+    <color name="widget_in">#A5D6A7</color>
+</resources>
