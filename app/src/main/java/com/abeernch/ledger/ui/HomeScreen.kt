@@ -134,8 +134,7 @@ fun HomeScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     for (a in data.accounts.filter { !it.archived }) {
-                        val reported = Balances.reported(a, data.txns)
-                        val balance = reported?.balanceMinor ?: Balances.account(a, data.txns)
+                        val balance = Balances.account(a, data.txns)
                         LedgerCard(Modifier.widthIn(min = 128.dp).width(140.dp), onClick = { onTab(3) }, padding = 14.dp) {
                             ColorDot(Color(a.color))
                             Spacer(Modifier.height(8.dp))
