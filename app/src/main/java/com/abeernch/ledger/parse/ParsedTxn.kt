@@ -20,5 +20,6 @@ data class ParsedTxn(
     val balanceMinor: Long?,    // available balance after the transaction
     val feeMinor: Long?,
     val reference: String?,     // TID, Trx ID, etc.
-    val isGeneric: Boolean      // true when no bank template matched
+    val isGeneric: Boolean,     // true when no bank template matched
+    val currency: String = "PKR"
 )

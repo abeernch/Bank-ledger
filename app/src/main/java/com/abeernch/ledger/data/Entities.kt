@@ -4,13 +4,19 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-/** One logged transaction. Money is in paisa (minor units). */
+/**
+ * One logged transaction. Money is in minor units (paisa).
+ *
+ * Rules used everywhere for totals (see logic/Money.kt):
+ *  - isTransfer = money moved between your own accounts: not spending, not income.
+ *  - isSplit    = this row was split into child rows: the children count, this row does not.
+ */
 @Entity(tableName = "txn", indices = [Index(value = ["hash"], unique = true)])
 data class Txn(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val timestamp: Long,        // when the transaction happened
-    val receivedAt: Long,       // when the message arrived
-    val bank: String,
+    val receivedAt: Long,       // when the message arrived (or when entered by hand)
+    val bank: String,           // bank name as detected from the message
     val direction: String,      // DEBIT or CREDIT
     val channel: String,        // CARD, ATM, TRANSFER, BILL, OTHER
     val amountMinor: Long,
@@ -21,11 +27,20 @@ data class Txn(
     val feeMinor: Long?,
     val reference: String?,
     val category: String,
-    val source: String,         // SMS, NOTIFICATION, IMPORT
-    val senderKey: String,      // SMS sender ID or app package
+    val source: String,         // SMS, NOTIFICATION, IMPORT, MANUAL
+    val senderKey: String,      // SMS sender ID, app package, or "manual"
     val isGeneric: Boolean,
     val rawText: String,
-    val hash: String
+    val hash: String,
+    // ---- added in database version 2 ----
+    val accountId: Long? = null,
+    val fundId: Long? = null,
+    val note: String? = null,
+    val isTransfer: Boolean = false,
+    val isSplit: Boolean = false,
+    val splitParentId: Long? = null,
+    val currency: String = "PKR",
+    val receiptPath: String? = null
 )
 
 /** A message that mentions money but could not be read. */
@@ -53,4 +68,59 @@ data class Rule(
 data class Alias(
     @PrimaryKey val senderKey: String,
     val bank: String
+)
+
+/**
+ * A bank account, wallet, or cash.
+ * Transactions are linked to an account by the detected [bank] name.
+ * Balance = openingMinor + money in - money out, counting from openingDate.
+ */
+@Entity(tableName = "account")
+data class Account(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,           // what the user calls it
+    val bank: String,           // detected bank name that links transactions here ("" for cash)
+    val kind: String,           // BANK, WALLET, CASH, SAVINGS
+    val color: Long,            // ARGB
+    val currency: String = "PKR",
+    val openingMinor: Long = 0,
+    val openingDate: Long = 0,
+    val archived: Boolean = false
+)
+
+/**
+ * FUND: money set aside for a purpose. Spending assigned to it is tracked (e.g. a wedding).
+ * GOAL: a savings target. Saved = startMinor + money in assigned - money out assigned.
+ */
+@Entity(tableName = "fund")
+data class Fund(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val kind: String,           // FUND or GOAL
+    val color: Long,
+    val targetMinor: Long? = null,   // budget for a fund, target for a goal
+    val startMinor: Long = 0,        // amount already saved when the goal was created
+    val note: String? = null,
+    val archived: Boolean = false
+)
+
+/** Monthly limit for one category. With rollover, last month's unused amount is added. */
+@Entity(tableName = "budget")
+data class Budget(
+    @PrimaryKey val category: String,
+    val limitMinor: Long,
+    val rollover: Boolean = false
+)
+
+/** Money lent to or borrowed from a person. */
+@Entity(tableName = "debt")
+data class Debt(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val person: String,
+    val direction: String,      // LENT (they owe me) or BORROWED (I owe them)
+    val amountMinor: Long,
+    val date: Long,
+    val note: String? = null,
+    val settledAt: Long? = null,
+    val txnId: Long? = null
 )

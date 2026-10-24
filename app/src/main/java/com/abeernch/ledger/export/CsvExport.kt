@@ -14,20 +14,25 @@ object CsvExport {
     private val timeFmt = DateTimeFormatter.ofPattern("HH:mm:ss")
 
     suspend fun write(context: Context, uri: Uri): Int {
-        val txns = AppDb.get(context).txns().allNow()
+        val db = AppDb.get(context)
+        val txns = db.txns().allNow()
+        val accounts: Map<Long?, String> = db.accounts().allNow().associate { it.id as Long? to it.name }
+        val funds: Map<Long?, String> = db.funds().allNow().associate { it.id as Long? to it.name }
         val zone = ZoneId.systemDefault()
         val header = listOf(
-            "Date", "Time", "Bank", "Type", "Channel", "Amount (PKR)", "Counterparty", "Location",
-            "Category", "Account", "Balance (PKR)", "Fee (PKR)", "Reference", "Source", "Message"
+            "Date", "Time", "Account", "Type", "Channel", "Amount", "Currency", "Counterparty", "Location",
+            "Category", "Fund", "Own transfer", "Split", "Part of split", "Note", "Account digits",
+            "Balance", "Fee", "Reference", "Source", "Message"
         )
         val sb = StringBuilder()
         sb.append(header.joinToString(",")).append("\r\n")
         for (t in txns) {
             val at = Instant.ofEpochMilli(t.timestamp).atZone(zone)
             val row = listOf(
-                dateFmt.format(at), timeFmt.format(at), t.bank,
+                dateFmt.format(at), timeFmt.format(at), accounts[t.accountId] ?: t.bank,
                 if (t.direction == "DEBIT") "Debit" else "Credit",
-                t.channel, rupees(t.amountMinor), t.counterparty, t.location, t.category,
+                t.channel, rupees(t.amountMinor), t.currency, t.counterparty, t.location, t.category,
+                funds[t.fundId], yes(t.isTransfer), yes(t.isSplit), yes(t.splitParentId != null), t.note,
                 t.accountTail, t.balanceMinor?.let { rupees(it) }, t.feeMinor?.let { rupees(it) },
                 t.reference, t.source, t.rawText
             )
@@ -36,6 +41,8 @@ object CsvExport {
         context.contentResolver.openOutputStream(uri)?.use { it.write(sb.toString().toByteArray(Charsets.UTF_8)) }
         return txns.size
     }
+
+    private fun yes(b: Boolean) = if (b) "Yes" else ""
 
     private fun rupees(minor: Long): String = "%d.%02d".format(minor / 100, kotlin.math.abs(minor % 100))
 

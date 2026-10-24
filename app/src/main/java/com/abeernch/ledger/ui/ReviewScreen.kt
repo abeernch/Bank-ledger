@@ -7,13 +7,13 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -25,44 +25,38 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.abeernch.ledger.data.AppDb
-import com.abeernch.ledger.data.Unparsed
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 /** Messages that mention money but no template could read. Copy them so a template can be added. */
 @Composable
-fun ReviewScreen(items: List<Unparsed>, modifier: Modifier = Modifier) {
+fun ReviewScreen(data: AppData, onBack: () -> Unit) {
     val context = LocalContext.current
     val db = remember { AppDb.get(context) }
     val scope = rememberCoroutineScope()
+    val items = data.unparsed
 
-    LazyColumn(modifier.fillMaxSize()) {
-        item {
-            Column(Modifier.padding(16.dp)) {
-                Text(
-                    "These messages mention money but could not be read. Copy them to add a new bank format.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                if (items.isNotEmpty()) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-                        OutlinedButton(onClick = {
-                            copy(context, items.joinToString("\n\n---\n\n") { "[${it.sender}] ${it.text}" })
-                        }) { Text("Copy all") }
-                        OutlinedButton(onClick = { scope.launch(Dispatchers.IO) { db.unparsed().deleteAll() } }) {
-                            Text("Dismiss all")
+    Column(Modifier.fillMaxSize()) {
+        ScreenHeader("Messages to review", onBack)
+        LazyColumn(Modifier.fillMaxSize().padding(horizontal = Gutter)) {
+            item {
+                Column(Modifier.padding(bottom = 12.dp)) {
+                    Text(
+                        "These mention money but could not be read. Copy them and send them over so a new bank format can be added.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (items.isNotEmpty()) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                            OutlinedButton(onClick = { copy(context, items.joinToString("\n\n---\n\n") { "[${it.sender}] ${it.text}" }) }) { Text("Copy all") }
+                            OutlinedButton(onClick = { scope.launch(Dispatchers.IO) { db.unparsed().deleteAll() } }) { Text("Dismiss all") }
                         }
                     }
                 }
             }
-        }
-        if (items.isEmpty()) {
-            item { Text("Nothing to review.", Modifier.padding(16.dp)) }
-        }
-        items(items, key = { it.id }) { u ->
-            Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
-                Column(Modifier.padding(16.dp)) {
-                    Text("${u.sender} · ${Format.full(u.receivedAt)}", style = MaterialTheme.typography.labelMedium)
+            if (items.isEmpty()) item { LedgerCard { EmptyState("Nothing to review", "Every money message so far was read.") } }
+            items(items, key = { it.id }) { u ->
+                LedgerCard(Modifier.padding(bottom = 10.dp)) {
+                    Text("${u.sender} · ${Format.full(u.receivedAt)}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     SelectionContainer { Text(u.text, Modifier.padding(vertical = 8.dp)) }
                     Row {
                         TextButton(onClick = { copy(context, "[${u.sender}] ${u.text}") }) { Text("Copy") }
@@ -70,6 +64,7 @@ fun ReviewScreen(items: List<Unparsed>, modifier: Modifier = Modifier) {
                     }
                 }
             }
+            item { Spacer(Modifier.height(24.dp)) }
         }
     }
 }

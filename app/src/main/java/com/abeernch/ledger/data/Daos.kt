@@ -16,8 +16,14 @@ interface TxnDao {
     @Query("SELECT * FROM txn ORDER BY timestamp ASC")
     suspend fun allNow(): List<Txn>
 
+    @Query("SELECT * FROM txn WHERE id = :id")
+    suspend fun byId(id: Long): Txn?
+
     @Query("SELECT * FROM txn WHERE timestamp >= :from AND timestamp < :to")
     suspend fun between(from: Long, to: Long): List<Txn>
+
+    @Query("SELECT * FROM txn WHERE splitParentId = :parentId")
+    suspend fun children(parentId: Long): List<Txn>
 
     @Query("SELECT COUNT(*) FROM txn WHERE hash = :hash")
     suspend fun countHash(hash: String): Int
@@ -29,6 +35,10 @@ interface TxnDao {
     )
     suspend fun nearby(amount: Long, direction: String, from: Long, to: Long): List<Txn>
 
+    /** Candidates for an own-account transfer: same amount, any direction, close in time. */
+    @Query("SELECT * FROM txn WHERE amountMinor = :amount AND timestamp BETWEEN :from AND :to")
+    suspend fun sameAmountAround(amount: Long, from: Long, to: Long): List<Txn>
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(t: Txn): Long
 
@@ -38,14 +48,20 @@ interface TxnDao {
     @Delete
     suspend fun delete(t: Txn)
 
+    @Query("DELETE FROM txn WHERE splitParentId = :parentId")
+    suspend fun deleteChildren(parentId: Long)
+
     @Query("UPDATE txn SET category = :category WHERE counterparty = :counterparty")
     suspend fun setCategoryFor(counterparty: String, category: String)
 
-    @Query("UPDATE txn SET bank = :newName WHERE bank = :oldName")
-    suspend fun renameBank(oldName: String, newName: String)
+    @Query("UPDATE txn SET fundId = NULL WHERE fundId = :fundId")
+    suspend fun clearFund(fundId: Long)
 
-    @Query("SELECT DISTINCT senderKey FROM txn WHERE bank = :bank")
-    suspend fun senderKeysFor(bank: String): List<String>
+    @Query("SELECT DISTINCT senderKey FROM txn WHERE accountId = :accountId")
+    suspend fun senderKeysFor(accountId: Long): List<String>
+
+    @Query("UPDATE txn SET accountId = :toId WHERE accountId = :fromId")
+    suspend fun moveAccount(fromId: Long, toId: Long)
 }
 
 @Dao
@@ -94,4 +110,76 @@ interface AliasDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun put(a: Alias)
+}
+
+@Dao
+interface AccountDao {
+    @Query("SELECT * FROM account ORDER BY archived, name")
+    fun all(): Flow<List<Account>>
+
+    @Query("SELECT * FROM account")
+    suspend fun allNow(): List<Account>
+
+    @Query("SELECT * FROM account WHERE bank = :bank ORDER BY archived LIMIT 1")
+    suspend fun byBank(bank: String): Account?
+
+    @Query("SELECT * FROM account WHERE id = :id")
+    suspend fun byId(id: Long): Account?
+
+    @Insert
+    suspend fun insert(a: Account): Long
+
+    @Update
+    suspend fun update(a: Account)
+
+    @Delete
+    suspend fun delete(a: Account)
+}
+
+@Dao
+interface FundDao {
+    @Query("SELECT * FROM fund ORDER BY archived, name")
+    fun all(): Flow<List<Fund>>
+
+    @Query("SELECT * FROM fund")
+    suspend fun allNow(): List<Fund>
+
+    @Insert
+    suspend fun insert(f: Fund): Long
+
+    @Update
+    suspend fun update(f: Fund)
+
+    @Delete
+    suspend fun delete(f: Fund)
+}
+
+@Dao
+interface BudgetDao {
+    @Query("SELECT * FROM budget ORDER BY category")
+    fun all(): Flow<List<Budget>>
+
+    @Query("SELECT * FROM budget")
+    suspend fun allNow(): List<Budget>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun put(b: Budget)
+
+    @Delete
+    suspend fun delete(b: Budget)
+}
+
+@Dao
+interface DebtDao {
+    @Query("SELECT * FROM debt ORDER BY settledAt IS NOT NULL, date DESC")
+    fun all(): Flow<List<Debt>>
+
+    @Insert
+    suspend fun insert(d: Debt): Long
+
+    @Update
+    suspend fun update(d: Debt)
+
+    @Delete
+    suspend fun delete(d: Debt)
 }

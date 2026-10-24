@@ -53,14 +53,25 @@ object GenericParser {
         else -> Channel.OTHER
     }
 
-    /** The transaction amount is the first currency amount that is not a balance or fee. */
-    private fun amount(text: String): Long? {
+    /**
+     * The transaction amount is the first currency amount that is not a balance or fee.
+     * PKR wins: a foreign card payment that also states the PKR charge is logged in PKR.
+     */
+    private fun amount(text: String): Pair<Long, String>? {
         for (m in TextUtil.amountRegex.findAll(text)) {
-            val before = text.substring(maxOf(0, m.range.first - 25), m.range.first).lowercase()
-            if ("bal" in before || "fee" in before || "limit" in before || "charges" in before) continue
-            return TextUtil.toMinor(m.groupValues[1])
+            if (isSideAmount(text, m.range.first)) continue
+            return TextUtil.toMinor(m.groupValues[1])?.let { it to "PKR" }
+        }
+        for (m in TextUtil.foreignRegex.findAll(text)) {
+            if (isSideAmount(text, m.range.first)) continue
+            return TextUtil.toMinor(m.groupValues[2])?.let { it to TextUtil.currencyCode(m.groupValues[1]) }
         }
         return null
+    }
+
+    private fun isSideAmount(text: String, start: Int): Boolean {
+        val before = text.substring(maxOf(0, start - 25), start).lowercase()
+        return "bal" in before || "fee" in before || "limit" in before || "charges" in before
     }
 
     private fun counterparty(text: String): String? {
@@ -76,7 +87,7 @@ object GenericParser {
 
     fun parse(text: String, receivedAt: Long): ParsedTxn? {
         if (TextUtil.isOtp(text)) return null
-        val amt = amount(text) ?: return null
+        val (amt, currency) = amount(text) ?: return null
         val dir = direction(text) ?: return null
         val raw = counterparty(text)
         val (name, place) = if (raw != null) TextUtil.splitMerchant(raw) else Pair(null, null)
@@ -92,7 +103,8 @@ object GenericParser {
             balanceMinor = TextUtil.balance(text),
             feeMinor = null,
             reference = null,
-            isGeneric = true
+            isGeneric = true,
+            currency = currency
         )
     }
 }

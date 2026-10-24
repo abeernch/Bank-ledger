@@ -28,7 +28,7 @@ object HistoryImport {
                 val sender = c.getString(iAddr) ?: continue
                 val body = c.getString(iBody) ?: continue
                 scanned++
-                when (Ingest.process(context, body, sender, sender, Ingest.SOURCE_IMPORT, c.getLong(iDate), refreshWidget = false)) {
+                when (Ingest.process(context, body, sender, sender, Ingest.SOURCE_IMPORT, c.getLong(iDate), live = false)) {
                     Ingest.Result.LOGGED -> logged++
                     Ingest.Result.REVIEW -> review++
                     else -> {}

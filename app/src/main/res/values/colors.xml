@@ -1,7 +1,7 @@
 <resources>
-    <color name="icon_bg">#0F4C5C</color>
-    <color name="widget_bg">#F20F4C5C</color>
+    <color name="icon_bg">#0F766E</color>
+    <color name="window_bg">#F6F7F9</color>
+    <color name="widget_bg">#F20F766E</color>
     <color name="widget_text">#FFFFFF</color>
-    <color name="widget_sub">#B3FFFFFF</color>
-    <color name="widget_in">#A5D6A7</color>
+    <color name="widget_sub">#CCFFFFFF</color>
 </resources>

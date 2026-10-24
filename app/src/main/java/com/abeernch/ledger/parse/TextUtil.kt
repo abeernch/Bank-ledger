@@ -119,11 +119,24 @@ object TextUtil {
         RegexOption.IGNORE_CASE
     )
 
+    /** Foreign currency amounts, used only when the message has no PKR amount. */
+    val foreignRegex = Regex(
+        "(USD|EUR|GBP|AED|SAR|CAD|AUD|\\$|£|€)\\s?([0-9][0-9,]*(?:\\.[0-9]{1,2})?)",
+        RegexOption.IGNORE_CASE
+    )
+
+    fun currencyCode(symbol: String): String = when (symbol) {
+        "$" -> "USD"
+        "£" -> "GBP"
+        "€" -> "EUR"
+        else -> symbol.uppercase()
+    }
+
     fun isOtp(text: String) = otpRegex.containsMatchIn(text)
 
     fun isPromo(text: String) = promoRegex.containsMatchIn(text)
 
-    fun hasAmount(text: String) = amountRegex.containsMatchIn(text)
+    fun hasAmount(text: String) = amountRegex.containsMatchIn(text) || foreignRegex.containsMatchIn(text)
 
     /** Personal mobile numbers have 10+ digits. Banks use short codes or names. */
     fun isPersonalSender(sender: String): Boolean {
