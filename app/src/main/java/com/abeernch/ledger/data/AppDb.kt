@@ -8,8 +8,8 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [Txn::class, Unparsed::class, Rule::class, Alias::class, Account::class, Fund::class, Budget::class, Debt::class],
-    version = 2,
+    entities = [Txn::class, Unparsed::class, Rule::class, Alias::class, Account::class, Fund::class, Budget::class, Debt::class, SavingsLock::class, LockEvent::class],
+    version = 3,
     exportSchema = false
 )
 abstract class AppDb : RoomDatabase() {
@@ -21,6 +21,8 @@ abstract class AppDb : RoomDatabase() {
     abstract fun funds(): FundDao
     abstract fun budgets(): BudgetDao
     abstract fun debts(): DebtDao
+    abstract fun locks(): LockDao
+    abstract fun lockEvents(): LockEventDao
 
     companion object {
         const val FILE_NAME = "ledger.db"
@@ -29,7 +31,7 @@ abstract class AppDb : RoomDatabase() {
 
         fun get(context: Context): AppDb = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, AppDb::class.java, FILE_NAME)
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
                 .also { instance = it }
         }
@@ -83,6 +85,23 @@ abstract class AppDb : RoomDatabase() {
                         "SELECT DISTINCT bank, bank, 'BANK', 4279203438, 'PKR', 0, 0, 0 FROM txn"
                 )
                 db.execSQL("UPDATE txn SET accountId = (SELECT id FROM account WHERE account.bank = txn.bank)")
+            }
+        }
+
+        /** Version 2 -> 3: adds savings locks and their history. Nothing else changes. */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS savings_lock (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "accountId INTEGER NOT NULL, name TEXT NOT NULL, amountMinor INTEGER NOT NULL, fundId INTEGER, " +
+                        "note TEXT, createdAt INTEGER NOT NULL, autoMode TEXT NOT NULL, autoValue INTEGER NOT NULL, " +
+                        "autoMinCreditMinor INTEGER NOT NULL, autoIncludeTransfers INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS lock_event (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "lockId INTEGER NOT NULL, lockName TEXT NOT NULL, deltaMinor INTEGER NOT NULL, " +
+                        "at INTEGER NOT NULL, reason TEXT NOT NULL, txnId INTEGER)"
+                )
             }
         }
     }

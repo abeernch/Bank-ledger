@@ -25,6 +25,19 @@ Every build installs over the old one and keeps your data, because all builds sh
 | Accounts | Balance per bank, wallet, cash or savings account. Set the current balance once and it stays up to date. Merge duplicates. People & debts |
 | Insights | 6-month in/out chart, category change vs last month, top payees, spending by weekday, recurring payments |
 
+### Savings locks
+
+Lock part of an account's balance so the app treats it as not usable. The money stays in the bank.
+
+- Accounts tab → **Lock money** on any account. Several named locks per account (e.g. *Plot savings*, *Emergency*).
+- **Available to use** = balance minus all locks. Shown per account, in the Accounts total, and on Home.
+- A lock can count towards a **Goal**; the goal's saved amount then includes it.
+- **Auto-lock**: lock a percent or fixed amount of each incoming credit, optionally only credits above a threshold
+  (your salary), optionally including transfers from your own accounts. Not applied during SMS history import.
+- Releasing or removing a lock needs your **fingerprint/face or the Ledger PIN**. Forgot the PIN? Reset it with the phone's screen lock.
+- If spending pushes an account below its locked amount, you get one warning until it is back above.
+- Every add, release and auto-lock is kept in the lock's history.
+
 Tap any transaction to change its category (saved as a rule for next time), assign it to a fund, split it across categories,
 add a note or receipt photo, mark it as a move between your own accounts, or record it as a loan.
 
@@ -42,7 +55,8 @@ category rules, PDF monthly statement, CSV export, backup and restore.
 | Fallback for unknown formats (also foreign currency) | `parse/GenericParser.kt` |
 | What counts as spending and income | `logic/Money.kt` |
 | Budgets, balances, transfers, recurring, insights | `logic/` |
-| Database and the version 1 → 2 migration | `data/` |
+| Database and migrations (v1 → v2 → v3) | `data/` |
+| Savings locks | `logic/Locks.kt`, `alerts/SavingsAlerts.kt`, `ui/LockSheets.kt`, `ui/Guard.kt` |
 | Screens | `ui/` (one file per tab) |
 | Theme and colours | `ui/Theme.kt` |
 | Alerts and daily reminder job | `alerts/` |

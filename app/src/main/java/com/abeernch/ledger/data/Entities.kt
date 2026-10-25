@@ -124,3 +124,41 @@ data class Debt(
     val settledAt: Long? = null,
     val txnId: Long? = null
 )
+
+// ---- added in database version 3 ----
+
+/**
+ * Money set aside inside an account. It stays in the bank, but the app treats it as
+ * not usable: Available = account balance - all locks on that account.
+ *
+ * Auto-lock rule (optional): when money arrives in the account, lock part of it.
+ *  autoMode PERCENT: autoValue is a percentage (20 = 20%).
+ *  autoMode FIXED:   autoValue is an amount in minor units.
+ *  Only credits of at least autoMinCreditMinor count (e.g. only the salary).
+ */
+@Entity(tableName = "savings_lock")
+data class SavingsLock(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val accountId: Long,
+    val name: String,
+    val amountMinor: Long,
+    val fundId: Long? = null,           // linked goal: its "saved" includes this lock
+    val note: String? = null,
+    val createdAt: Long,
+    val autoMode: String = "NONE",      // NONE, PERCENT, FIXED
+    val autoValue: Long = 0,
+    val autoMinCreditMinor: Long = 0,
+    val autoIncludeTransfers: Boolean = false
+)
+
+/** History of a lock: every add, release and auto-lock. */
+@Entity(tableName = "lock_event")
+data class LockEvent(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val lockId: Long,
+    val lockName: String,       // kept so history reads well after a lock is deleted
+    val deltaMinor: Long,       // + locked, - released
+    val at: Long,
+    val reason: String,         // CREATE, ADD, RELEASE, AUTO
+    val txnId: Long? = null
+)

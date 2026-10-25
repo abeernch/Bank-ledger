@@ -183,3 +183,39 @@ interface DebtDao {
     @Delete
     suspend fun delete(d: Debt)
 }
+
+@Dao
+interface LockDao {
+    @Query("SELECT * FROM savings_lock ORDER BY accountId, createdAt")
+    fun all(): Flow<List<SavingsLock>>
+
+    @Query("SELECT * FROM savings_lock")
+    suspend fun allNow(): List<SavingsLock>
+
+    @Query("SELECT * FROM savings_lock WHERE accountId = :accountId")
+    suspend fun forAccount(accountId: Long): List<SavingsLock>
+
+    @Insert
+    suspend fun insert(l: SavingsLock): Long
+
+    @Update
+    suspend fun update(l: SavingsLock)
+
+    @Delete
+    suspend fun delete(l: SavingsLock)
+
+    @Query("UPDATE savings_lock SET fundId = NULL WHERE fundId = :fundId")
+    suspend fun clearFund(fundId: Long)
+
+    @Query("UPDATE savings_lock SET accountId = :toId WHERE accountId = :fromId")
+    suspend fun moveAccount(fromId: Long, toId: Long)
+}
+
+@Dao
+interface LockEventDao {
+    @Query("SELECT * FROM lock_event ORDER BY at DESC")
+    fun all(): Flow<List<LockEvent>>
+
+    @Insert
+    suspend fun insert(e: LockEvent)
+}

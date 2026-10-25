@@ -5,7 +5,9 @@ import com.abeernch.ledger.data.Account
 import com.abeernch.ledger.data.Budget
 import com.abeernch.ledger.data.Debt
 import com.abeernch.ledger.data.Fund
+import com.abeernch.ledger.data.LockEvent
 import com.abeernch.ledger.data.Rule
+import com.abeernch.ledger.data.SavingsLock
 import com.abeernch.ledger.data.Txn
 import com.abeernch.ledger.data.Unparsed
 
@@ -17,7 +19,9 @@ data class AppData(
     val budgets: List<Budget> = emptyList(),
     val debts: List<Debt> = emptyList(),
     val rules: List<Rule> = emptyList(),
-    val unparsed: List<Unparsed> = emptyList()
+    val unparsed: List<Unparsed> = emptyList(),
+    val locks: List<SavingsLock> = emptyList(),
+    val lockEvents: List<LockEvent> = emptyList()      // newest first
 ) {
     private val accountById = accounts.associateBy { it.id }
     private val fundById = funds.associateBy { it.id }
@@ -32,6 +36,8 @@ data class AppData(
     val categories: List<String>
         get() = (Categorizer.builtIn + rules.map { it.category } + budgets.map { it.category } + txns.map { it.category })
             .distinct()
+
+    fun locksFor(accountId: Long): List<SavingsLock> = locks.filter { it.accountId == accountId }
 
     fun children(parent: Txn): List<Txn> = txns.filter { it.splitParentId == parent.id }
 }

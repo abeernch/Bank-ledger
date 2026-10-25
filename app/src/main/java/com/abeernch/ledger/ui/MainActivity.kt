@@ -36,6 +36,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -161,8 +162,10 @@ class MainActivity : FragmentActivity() {
         val debts by db.debts().all().collectAsState(initial = emptyList())
         val rules by db.rules().all().collectAsState(initial = emptyList())
         val unparsed by db.unparsed().all().collectAsState(initial = emptyList())
-        val data = remember(txns, accounts, funds, budgets, debts, rules, unparsed) {
-            AppData(txns, accounts, funds, budgets, debts, rules, unparsed)
+        val locks by db.locks().all().collectAsState(initial = emptyList())
+        val lockEvents by db.lockEvents().all().collectAsState(initial = emptyList())
+        val data = remember(txns, accounts, funds, budgets, debts, rules, unparsed, locks, lockEvents) {
+            AppData(txns, accounts, funds, budgets, debts, rules, unparsed, locks, lockEvents)
         }
 
         var tab by rememberSaveable { mutableStateOf(0) }
@@ -212,62 +215,129 @@ class MainActivity : FragmentActivity() {
                 if (on) authenticate { appLock = true; prefs.appLock = true } else { appLock = false; prefs.appLock = false }
             }
         )
+        // ---- Guard for savings locks: fingerprint/face or Ledger PIN ----
+        var pinAsk by remember { mutableStateOf<PinAsk?>(null) }
+        val guard = remember {
+            Guard(
+                require = { reason, onOk ->
+                    if (!prefs.hasPin) pinAsk = PinAsk.Set(onOk)
+                    else if (biometricAvailable()) biometricOrPin(reason, onOk) { pinAsk = PinAsk.Verify(reason, onOk) }
+                    else pinAsk = PinAsk.Verify(reason, onOk)
+                },
+                ensurePin = { onOk -> if (prefs.hasPin) onOk() else pinAsk = PinAsk.Set(onOk) },
+                changePin = {
+                    if (!prefs.hasPin) pinAsk = PinAsk.Set {}
+                    else pinAsk = PinAsk.Verify("Enter your current PIN to change it.") { pinAsk = PinAsk.Set {} }
+                },
+                hasPin = { prefs.hasPin }
+            )
+        }
+
         val openTxn: (Txn) -> Unit = { openTxnId = it.id }
         val go: (Route) -> Unit = { stack.add(it) }
         val back: () -> Unit = { if (stack.isNotEmpty()) stack.removeAt(stack.lastIndex) }
 
         val top = stack.lastOrNull()
-        if (top != null) {
-            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-                when (top) {
-                    Route.Settings -> SettingsScreen(settings, setup, importing, { if (smsGranted) runImport() else setup.onSms() }, go, back, data.unparsed.size)
-                    Route.Review -> ReviewScreen(data, back)
-                    Route.Rules -> RulesScreen(data, back)
-                    Route.People -> PeopleScreen(data, back)
-                    is Route.FundDetail -> FundDetailScreen(top.id, data, back, openTxn)
-                }
-            }
-        } else {
-            Scaffold(
-                containerColor = MaterialTheme.colorScheme.background,
-                bottomBar = {
-                    NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer, tonalElevation = 0.dp) {
-                        tabs.forEachIndexed { i, t ->
-                            NavigationBarItem(
-                                selected = tab == i,
-                                onClick = { tab = i },
-                                icon = { Icon(painterResource(t.icon), null) },
-                                label = { Text(t.label) }
-                            )
-                        }
+        CompositionLocalProvider(LocalGuard provides guard) {
+            if (top != null) {
+                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                    when (top) {
+                        Route.Settings -> SettingsScreen(settings, setup, importing, { if (smsGranted) runImport() else setup.onSms() }, go, back, data.unparsed.size)
+                        Route.Review -> ReviewScreen(data, back)
+                        Route.Rules -> RulesScreen(data, back)
+                        Route.People -> PeopleScreen(data, back)
+                        is Route.FundDetail -> FundDetailScreen(top.id, data, back, openTxn)
                     }
                 }
-            ) { padding ->
-                val m = Modifier.padding(padding)
-                when (tab) {
-                    0 -> HomeScreen(data, prefs.myName, setup, openTxn, go, { tab = it }, m)
-                    1 -> ActivityScreen(data, openTxn, { adding = true }, m)
-                    2 -> BudgetsScreen(data, go, m)
-                    3 -> AccountsScreen(data, go, m)
-                    else -> InsightsScreen(data, m)
+            } else {
+                Scaffold(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    bottomBar = {
+                        NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer, tonalElevation = 0.dp) {
+                            tabs.forEachIndexed { i, t ->
+                                NavigationBarItem(
+                                    selected = tab == i,
+                                    onClick = { tab = i },
+                                    icon = { Icon(painterResource(t.icon), null) },
+                                    label = { Text(t.label) }
+                                )
+                            }
+                        }
+                    }
+                ) { padding ->
+                    val m = Modifier.padding(padding)
+                    when (tab) {
+                        0 -> HomeScreen(data, prefs.myName, setup, openTxn, go, { tab = it }, m)
+                        1 -> ActivityScreen(data, openTxn, { adding = true }, m)
+                        2 -> BudgetsScreen(data, go, m)
+                        3 -> AccountsScreen(data, go, m)
+                        else -> InsightsScreen(data, m)
+                    }
                 }
             }
+
+            // Sheets float over whatever screen is showing.
+            openTxnId?.let { id ->
+                val t = data.txns.firstOrNull { it.id == id }
+                if (t == null) LaunchedEffect(id) { openTxnId = null }   // it was deleted
+                else TxnDetailSheet(
+                    t, data,
+                    onDismiss = { openTxnId = null },
+                    onEdit = { openTxnId = null; editing = it },
+                    onSplit = { openTxnId = null; splitting = it }
+                )
+            }
+            if (adding || editing != null) EntrySheet(data, editing) { adding = false; editing = null }
+            splitting?.let { SplitSheet(it, data) { splitting = null } }
         }
 
-        // Sheets float over whatever screen is showing.
-        openTxnId?.let { id ->
-            val t = data.txns.firstOrNull { it.id == id }
-            if (t == null) LaunchedEffect(id) { openTxnId = null }   // it was deleted
-            else TxnDetailSheet(
-                t, data,
-                onDismiss = { openTxnId = null },
-                onEdit = { openTxnId = null; editing = it },
-                onSplit = { openTxnId = null; splitting = it }
+        when (val ask = pinAsk) {
+            is PinAsk.Verify -> PinDialog(
+                title = "Ledger PIN",
+                reason = ask.reason,
+                onDismiss = { pinAsk = null },
+                onForgot = {
+                    // Forgot the PIN: prove it is you with the phone's own screen lock, then set a new one.
+                    pinAsk = null
+                    authenticate { pinAsk = PinAsk.Set(ask.onOk) }
+                },
+                check = { prefs.checkPin(it) },
+                onOk = { pinAsk = null; ask.onOk() }
             )
+            is PinAsk.Set -> SetPinDialog(
+                title = if (prefs.hasPin) "New Ledger PIN" else "Create a Ledger PIN",
+                onDismiss = { pinAsk = null },
+                onSet = { prefs.setPin(it); pinAsk = null; ask.onOk() }
+            )
+            null -> {}
         }
-        if (adding || editing != null) EntrySheet(data, editing) { adding = false; editing = null }
-        splitting?.let { SplitSheet(it, data) { splitting = null } }
     }
+
+    private fun biometricAvailable(): Boolean =
+        BiometricManager.from(this).canAuthenticate(BIOMETRIC_WEAK) == BiometricManager.BIOMETRIC_SUCCESS
+
+    /** Fingerprint or face, with a "Use PIN" button that falls back to the Ledger PIN. */
+    private fun biometricOrPin(reason: String, onOk: () -> Unit, onUsePin: () -> Unit) {
+        val prompt = BiometricPrompt(this, ContextCompat.getMainExecutor(this), object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) = onOk()
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                if (errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON) onUsePin()
+            }
+        })
+        val info = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("Confirm it is you")
+            .setSubtitle(reason)
+            .setAllowedAuthenticators(BIOMETRIC_WEAK)
+            .setNegativeButtonText("Use PIN")
+            .build()
+        prompt.authenticate(info)
+    }
+}
+
+/** Which PIN dialog is showing. */
+private sealed interface PinAsk {
+    class Verify(val reason: String, val onOk: () -> Unit) : PinAsk
+    class Set(val onOk: () -> Unit) : PinAsk
 }
 
 @Composable

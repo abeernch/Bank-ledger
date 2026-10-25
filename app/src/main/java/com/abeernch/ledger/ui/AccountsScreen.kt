@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardOptions
@@ -44,6 +45,8 @@ import java.time.YearMonth
 fun AccountsScreen(data: AppData, onGo: (Route) -> Unit, modifier: Modifier = Modifier) {
     var editing by remember { mutableStateOf<Account?>(null) }
     var adding by remember { mutableStateOf(false) }
+    var lockingAccount by remember { mutableStateOf<Long?>(null) }   // new lock on this account
+    var openLock by remember { mutableStateOf<Long?>(null) }
 
     val month = YearMonth.now()
     val monthTxns = Money.inRange(data.txns, Format.monthStart(month), Format.monthEnd(month))
@@ -64,6 +67,19 @@ fun AccountsScreen(data: AppData, onGo: (Route) -> Unit, modifier: Modifier = Mo
                 byCurrency.filterKeys { it != "PKR" }.forEach { (cur, v) ->
                     Text(Format.money(v, cur), style = MaterialTheme.typography.titleMedium)
                 }
+                val totalLocked = data.locks.filter { l -> data.account(l.accountId)?.let { it.currency == "PKR" && !it.archived } == true }.sumOf { it.amountMinor }
+                if (totalLocked > 0) {
+                    Row(Modifier.padding(top = 10.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Locked", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(Format.money(totalLocked), style = MaterialTheme.typography.titleMedium)
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text("Available to use", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(Format.money((byCurrency["PKR"] ?: 0L) - totalLocked), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
                 Text(
                     "Opening balance plus everything logged. Set each account's current balance once to make this exact.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -76,7 +92,7 @@ fun AccountsScreen(data: AppData, onGo: (Route) -> Unit, modifier: Modifier = Mo
         if (active.isEmpty()) item { LedgerCard { EmptyState("No accounts yet", "They appear when the first bank message arrives, or tap + to add cash.") } }
         active.forEach { a ->
             item(key = "a-${a.id}") {
-                AccountCard(a, data, monthTxns) { editing = a }
+                AccountCard(a, data, monthTxns, onLock = { lockingAccount = a.id }, onOpenLock = { openLock = it }) { editing = a }
                 Spacer(Modifier.height(10.dp))
             }
         }
@@ -113,11 +129,21 @@ fun AccountsScreen(data: AppData, onGo: (Route) -> Unit, modifier: Modifier = Mo
     if (adding || editing != null) {
         AccountDialog(existing = editing, data = data, onDismiss = { adding = false; editing = null })
     }
+    lockingAccount?.let { LockEditSheet(data, it, null) { lockingAccount = null } }
+    openLock?.let { LockDetailSheet(data, it) { openLock = null } }
 }
 
 @Composable
-private fun AccountCard(a: Account, data: AppData, monthTxns: List<com.abeernch.ledger.data.Txn>, onClick: () -> Unit) {
+private fun AccountCard(
+    a: Account,
+    data: AppData,
+    monthTxns: List<com.abeernch.ledger.data.Txn>,
+    onLock: (() -> Unit)? = null,
+    onOpenLock: (Long) -> Unit = {},
+    onClick: () -> Unit
+) {
     val balance = Balances.account(a, data.txns)
+    val locks = data.locksFor(a.id)
     val reported = Balances.reported(a, data.txns)
     val mine = monthTxns.filter { it.accountId == a.id }
     val out = Money.spent(mine)
@@ -145,6 +171,44 @@ private fun AccountCard(a: Account, data: AppData, monthTxns: List<com.abeernch.
         Row(Modifier.padding(top = 8.dp)) {
             Text("This month  −${Format.number(out)}", style = MaterialTheme.typography.bodySmall)
             Text("   +${Format.number(inn)}", style = MaterialTheme.typography.bodySmall, color = LedgerTheme.colors.credit)
+        }
+
+        // Savings locks inside this account
+        if (locks.isNotEmpty()) {
+            val available = balance - locks.sumOf { it.amountMinor }
+            androidx.compose.material3.HorizontalDivider(color = LedgerTheme.colors.cardBorder, modifier = Modifier.padding(vertical = 10.dp))
+            for (l in locks) {
+                androidx.compose.material3.Surface(onClick = { onOpenLock(l.id) }, color = androidx.compose.ui.graphics.Color.Transparent) {
+                    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.material3.Icon(
+                            androidx.compose.ui.res.painterResource(R.drawable.ic_lock), null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 10.dp).size(16.dp)
+                        )
+                        Column(Modifier.weight(1f)) {
+                            Text(l.name, style = MaterialTheme.typography.bodyMedium)
+                            val sub = listOfNotNull(
+                                data.fund(l.fundId)?.let { "Goal: ${it.name}" },
+                                if (l.autoMode != "NONE") "Auto-lock on" else null
+                            )
+                            if (sub.isNotEmpty()) Text(sub.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Text(Format.money(l.amountMinor, a.currency), style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+            Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Available to use", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    Format.money(available, a.currency), style = MaterialTheme.typography.titleMedium,
+                    color = if (available < 0) LedgerTheme.colors.warning else MaterialTheme.colorScheme.primary
+                )
+            }
+            if (available < 0) {
+                Text("Spending has gone into locked savings.", style = MaterialTheme.typography.bodySmall, color = LedgerTheme.colors.warning)
+            }
+        }
+        if (onLock != null) {
+            TextButton(onClick = onLock, modifier = Modifier.padding(top = 4.dp)) { Text(if (locks.isEmpty()) "Lock money" else "Lock more") }
         }
     }
 }
@@ -247,6 +311,7 @@ private fun AccountDialog(existing: Account?, data: AppData, onDismiss: () -> Un
                         if (key != "manual") db.aliases().put(com.abeernch.ledger.data.Alias(key, to.bank))
                     }
                     db.txns().moveAccount(existing.id, to.id)
+                    db.locks().moveAccount(existing.id, to.id)
                     db.accounts().update(existing.copy(archived = true))
                 }
                 onDismiss()

@@ -99,6 +99,32 @@ fun HomeScreen(
             )
         }
 
+        // Savings locks: what is actually free to spend across accounts
+        if (data.locks.isNotEmpty()) {
+            item {
+                val pkr = data.accounts.filter { !it.archived && it.currency == "PKR" }
+                val locked = data.locks.filter { l -> pkr.any { it.id == l.accountId } }.sumOf { it.amountMinor }
+                val available = pkr.sumOf { Balances.account(it, data.txns) } - locked
+                LedgerCard(Modifier.padding(top = 10.dp), onClick = { onTab(3) }) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TintedIcon(R.drawable.ic_lock, MaterialTheme.colorScheme.primary, 36.dp)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Available to use", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                Format.money(available), style = MaterialTheme.typography.titleMedium,
+                                color = if (available < 0) LedgerTheme.colors.warning else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text("Locked", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(Format.money(locked), style = MaterialTheme.typography.titleMedium)
+                        }
+                    }
+                }
+            }
+        }
+
         // Things that need a look
         val alerts = buildList {
             if (data.unparsed.isNotEmpty()) {

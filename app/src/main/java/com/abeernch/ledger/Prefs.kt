@@ -42,4 +42,25 @@ class Prefs(context: Context) {
     fun alertShown(key: String): Boolean = p.getBoolean("alert:$key", false)
 
     fun markAlertShown(key: String) = p.edit().putBoolean("alert:$key", true).apply()
+
+    fun clearAlert(key: String) = p.edit().remove("alert:$key").apply()
+
+    // ---- Ledger PIN, guards changes to savings locks ----
+    // Only a salted SHA-256 hash is stored, never the PIN itself.
+
+    val hasPin: Boolean get() = p.contains("pin_hash")
+
+    fun setPin(pin: String) {
+        val salt = java.util.UUID.randomUUID().toString()
+        p.edit().putString("pin_salt", salt).putString("pin_hash", hash(salt, pin)).apply()
+    }
+
+    fun checkPin(pin: String): Boolean {
+        val salt = p.getString("pin_salt", null) ?: return false
+        return hash(salt, pin) == p.getString("pin_hash", null)
+    }
+
+    private fun hash(salt: String, pin: String): String =
+        java.security.MessageDigest.getInstance("SHA-256").digest((salt + pin).toByteArray())
+            .joinToString("") { "%02x".format(it) }
 }

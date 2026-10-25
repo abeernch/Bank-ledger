@@ -67,6 +67,7 @@ fun SettingsScreen(
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val prefs = remember { Prefs(ctx) }
+    val guard = LocalGuard.current
     var myName by remember { mutableStateOf(prefs.myName) }
     var budgetAlerts by remember { mutableStateOf(prefs.budgetAlerts) }
     var billReminders by remember { mutableStateOf(prefs.billReminders) }
@@ -141,6 +142,11 @@ fun SettingsScreen(
                         if (settings.lockAvailable) "Fingerprint, face or screen lock to open Ledger" else "Set a screen lock on the phone first",
                         settings.appLock, settings.lockAvailable
                     ) { settings.onAppLock(it) }
+                    Divider()
+                    LinkRow(
+                        if (guard.hasPin()) "Change Ledger PIN" else "Create Ledger PIN",
+                        "Protects locked savings. Fingerprint also works."
+                    ) { guard.changePin() }
                     Divider()
                     ToggleRow("Budget alerts", "Notify at 80% and 100% of a budget", budgetAlerts) {
                         budgetAlerts = it; prefs.budgetAlerts = it

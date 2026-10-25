@@ -19,16 +19,20 @@ object Notifier {
 
     private const val CH_BUDGET = "budget"
     private const val CH_BILLS = "bills"
+    private const val CH_SAVINGS = "savings"
 
     fun createChannels(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(CH_BUDGET, "Budget alerts", NotificationManager.IMPORTANCE_DEFAULT))
         nm.createNotificationChannel(NotificationChannel(CH_BILLS, "Bill reminders", NotificationManager.IMPORTANCE_DEFAULT))
+        nm.createNotificationChannel(NotificationChannel(CH_SAVINGS, "Savings locks", NotificationManager.IMPORTANCE_DEFAULT))
     }
 
     fun budget(context: Context, id: Int, title: String, text: String) = post(context, CH_BUDGET, id, title, text)
 
     fun bill(context: Context, id: Int, title: String, text: String) = post(context, CH_BILLS, id, title, text)
+
+    fun savings(context: Context, id: Int, title: String, text: String) = post(context, CH_SAVINGS, id, title, text)
 
     private fun post(context: Context, channel: String, id: Int, title: String, text: String) {
         if (Build.VERSION.SDK_INT >= 33 &&

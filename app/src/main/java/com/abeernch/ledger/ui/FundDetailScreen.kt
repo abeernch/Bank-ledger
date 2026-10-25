@@ -43,7 +43,8 @@ fun FundDetailScreen(fundId: Long, data: AppData, onBack: () -> Unit, onOpenTxn:
         return
     }
     val isGoal = f.kind == "GOAL"
-    val value = if (isGoal) Balances.goalSaved(f, data.txns) else Balances.fundSpent(f, data.txns)
+    val value = if (isGoal) com.abeernch.ledger.logic.Locks.goalSaved(f, data.txns, data.locks) else Balances.fundSpent(f, data.txns)
+    val linkedLocks = data.locks.filter { it.fundId == f.id }
     val list = data.txns.filter { it.fundId == f.id }
 
     Column(Modifier.fillMaxSize()) {
@@ -65,6 +66,12 @@ fun FundDetailScreen(fundId: Long, data: AppData, onBack: () -> Unit, onOpenTxn:
                             if (isGoal) "${Format.money((target - value).coerceAtLeast(0))} to go of ${Format.money(target)}"
                             else if (value <= target) "${Format.money(target - value)} left of ${Format.money(target)}"
                             else "${Format.money(value - target)} over the ${Format.money(target)} budget",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    for (l in linkedLocks) {
+                        Text(
+                            "Includes ${Format.money(l.amountMinor)} locked as ${l.name} in ${data.account(l.accountId)?.name ?: "an account"}.",
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -104,6 +111,7 @@ fun FundDetailScreen(fundId: Long, data: AppData, onBack: () -> Unit, onOpenTxn:
             scope.launch(Dispatchers.IO) {
                 val db = AppDb.get(ctx)
                 db.txns().clearFund(f.id)
+                db.locks().clearFund(f.id)
                 db.funds().delete(f)
             }
             onBack()

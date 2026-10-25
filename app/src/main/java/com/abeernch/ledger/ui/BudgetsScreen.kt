@@ -195,7 +195,7 @@ private fun BudgetRow(line: BudgetLine, onClick: () -> Unit) {
 @Composable
 private fun FundCard(f: Fund, data: AppData, onClick: () -> Unit) {
     val isGoal = f.kind == "GOAL"
-    val value = if (isGoal) Balances.goalSaved(f, data.txns) else Balances.fundSpent(f, data.txns)
+    val value = if (isGoal) com.abeernch.ledger.logic.Locks.goalSaved(f, data.txns, data.locks) else Balances.fundSpent(f, data.txns)
     val count = data.txns.count { it.fundId == f.id }
     LedgerCard(onClick = onClick) {
         Row(verticalAlignment = Alignment.CenterVertically) {

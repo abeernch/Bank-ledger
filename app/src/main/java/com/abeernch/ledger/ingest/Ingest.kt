@@ -4,6 +4,7 @@ import android.content.Context
 import com.abeernch.ledger.LedgerApp
 import com.abeernch.ledger.Prefs
 import com.abeernch.ledger.alerts.BudgetAlerts
+import com.abeernch.ledger.alerts.SavingsAlerts
 import com.abeernch.ledger.category.Categorizer
 import com.abeernch.ledger.data.Account
 import com.abeernch.ledger.data.AppDb
@@ -115,17 +116,24 @@ object Ingest {
      */
     suspend fun afterInsert(context: Context, t: Txn, live: Boolean) {
         val db = AppDb.get(context)
+        var final = t
         if (!t.isTransfer) {
             val candidates = db.txns().sameAmountAround(t.amountMinor, t.timestamp - TransferMatch.WINDOW_MS, t.timestamp + TransferMatch.WINDOW_MS)
             val partner = TransferMatch.partner(t, candidates)
             if (partner != null) {
-                db.txns().update(t.copy(isTransfer = true, category = Categorizer.TRANSFERS))
+                final = t.copy(isTransfer = true, category = Categorizer.TRANSFERS)
+                db.txns().update(final)
                 db.txns().update(partner.copy(isTransfer = true, category = Categorizer.TRANSFERS))
             } else if (live && Money.isSpend(t)) {
                 BudgetAlerts.check(context, t.category)
             }
         }
-        if (live) SpendWidget.refresh(context)
+        if (live) {
+            // Savings locks: never during history import, so old credits are not locked again.
+            SavingsAlerts.autoLock(context, final)
+            if (final.direction == "DEBIT") SavingsAlerts.checkDip(context, final.accountId)
+            SpendWidget.refresh(context)
+        }
     }
 
     /** The account for a detected bank name. Created the first time a bank is seen. */
